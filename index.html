@@ -27,6 +27,11 @@
             background-color: #00ff00;
             border: none;
             color: #000;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #00cc00;
         }
     </style>
 </head>
@@ -64,6 +69,7 @@
 
         // Uložení původních pozic vrcholů
         const originalPositions = Array.from(geometry.attributes.position.array);
+        const smoothedDisplacements = new Float32Array(originalPositions.length / 3).fill(1);
 
         // Audio
         const startButton = document.getElementById('startButton');
@@ -83,13 +89,12 @@
                 if (!audioContext) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     analyser = audioContext.createAnalyser();
-                    analyser.fftSize = 256;
+                    analyser.fftSize = 512; // Zvýšeno pro jemnější frekvenční data
+                    analyser.smoothingTimeConstant = 0.85; // Hladší přechody
                     
                     source = audioContext.createMediaStreamSource(audioStream);
                     source.connect(analyser);
                     
-                    // Nepřipojujeme k audioContext.destination, abychom neslyšeli zvuk dvakrát
-
                     bufferLength = analyser.frequencyBinCount;
                     dataArray = new Uint8Array(bufferLength);
                 }
@@ -103,7 +108,6 @@
             }
         });
 
-
         // Animace
         function animate() {
             requestAnimationFrame(animate);
@@ -112,27 +116,40 @@
                 analyser.getByteFrequencyData(dataArray);
 
                 const positions = geometry.attributes.position.array;
+                let avgFrequency = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    avgFrequency += dataArray[i];
+                }
+                avgFrequency /= bufferLength;
+
+                // Změna barvy podle průměrné frekvence
+                const hue = (avgFrequency / 255) * 360;
+                material.color.setHSL(hue / 360, 0.7, 0.5);
+
                 for (let i = 0; i < positions.length; i += 3) {
+                    const vertexIndex = i / 3;
                     const originalX = originalPositions[i];
                     const originalY = originalPositions[i + 1];
                     const originalZ = originalPositions[i + 2];
                     
                     const vertex = new THREE.Vector3(originalX, originalY, originalZ).normalize();
                     
-                    const frequencyIndex = i % bufferLength;
+                    const frequencyIndex = vertexIndex % bufferLength;
                     const frequencyValue = dataArray[frequencyIndex] / 255;
 
-                    const displacement = 1 + frequencyValue * 1.5;
+                    // Hladší přechody pomocí exponenciálního vyhlazování
+                    const targetDisplacement = 1 + frequencyValue * 1.2;
+                    smoothedDisplacements[vertexIndex] += (targetDisplacement - smoothedDisplacements[vertexIndex]) * 0.1;
 
-                    positions[i] = originalX * displacement;
-                    positions[i + 1] = originalY * displacement;
-                    positions[i + 2] = originalZ * displacement;
+                    positions[i] = originalX * smoothedDisplacements[vertexIndex];
+                    positions[i + 1] = originalY * smoothedDisplacements[vertexIndex];
+                    positions[i + 2] = originalZ * smoothedDisplacements[vertexIndex];
                 }
                 geometry.attributes.position.needsUpdate = true;
             }
 
-            sphere.rotation.x += 0.001;
-            sphere.rotation.y += 0.001;
+            sphere.rotation.x += 0.002;
+            sphere.rotation.y += 0.002;
 
             renderer.render(scene, camera);
         }
