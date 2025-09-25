@@ -27,11 +27,6 @@
             background-color: #00ff00;
             border: none;
             color: #000;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #00cc00;
         }
     </style>
 </head>
@@ -48,57 +43,68 @@
     </div>
     <canvas id="visualizerCanvas"></canvas>
 
+    <!-- Import Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // Inicializace scény, kamery a rendereru
+        // Scéna
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 5;
 
+        // Renderer
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('visualizerCanvas'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // Vytvoření koule
+        // Koule
         const geometry = new THREE.IcosahedronGeometry(2, 20);
-        const colors = new Float32Array(geometry.attributes.position.count * 3);
-        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        const material = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true });
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
         const sphere = new THREE.Mesh(geometry, material);
         scene.add(sphere);
 
         // Uložení původních pozic vrcholů
         const originalPositions = Array.from(geometry.attributes.position.array);
-        const smoothedDisplacements = new Float32Array(geometry.attributes.position.count).fill(1);
 
-        // Audio kontext a analyzér
+        // Audio
         const startButton = document.getElementById('startButton');
         let audioContext, analyser, source, bufferLength, dataArray;
 
         startButton.addEventListener('click', async () => {
             try {
-                const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+                // Požádáme uživatele o výběr záložky ke sdílení (s audiem)
+                const stream = await navigator.mediaDevices.getDisplayMedia({
+                    video: true, // Musíme požádat i o video, aby se zobrazila volba záložky
+                    audio: true
+                });
+
+                // Zvukovou stopu ze streamu použijeme pro vizualizaci
                 const audioStream = new MediaStream(stream.getAudioTracks());
 
                 if (!audioContext) {
                     audioContext = new (window.AudioContext || window.webkitAudioContext)();
                     analyser = audioContext.createAnalyser();
-                    analyser.fftSize = 128; // Menší fftSize pro rychlé reakce na beaty
-                    analyser.smoothingTimeConstant = 0.4; // Rychlejší reakce
+                    analyser.fftSize = 256;
+                    
                     source = audioContext.createMediaStreamSource(audioStream);
                     source.connect(analyser);
+                    
+                    // Nepřipojujeme k audioContext.destination, abychom neslyšeli zvuk dvakrát
+
                     bufferLength = analyser.frequencyBinCount;
                     dataArray = new Uint8Array(bufferLength);
                 }
 
+                // Schováme instrukce
                 document.getElementById('info').style.display = 'none';
+
             } catch (err) {
                 console.error("Chyba při zachytávání audia:", err);
                 alert("Nepodařilo se zachytit audio. Ujistěte se, že jste povolili sdílení.");
             }
         });
 
-        // Animace a reakce na zvuk
+
+        // Animace
         function animate() {
             requestAnimationFrame(animate);
 
@@ -106,42 +112,27 @@
                 analyser.getByteFrequencyData(dataArray);
 
                 const positions = geometry.attributes.position.array;
-                const colors = geometry.attributes.color.array;
-
-                // Průměr nízkých frekvencí pro detekci beatů
-                let bassSum = 0;
-                for (let i = 0; i < bufferLength / 4; i++) { // Pouze první čtvrtina (basy)
-                    bassSum += dataArray[i];
-                }
-                const bassAverage = bassSum / (bufferLength / 4) / 255;
-
                 for (let i = 0; i < positions.length; i += 3) {
-                    const vertexIndex = i / 3;
                     const originalX = originalPositions[i];
                     const originalY = originalPositions[i + 1];
                     const originalZ = originalPositions[i + 2];
+                    
+                    const vertex = new THREE.Vector3(originalX, originalY, originalZ).normalize();
+                    
+                    const frequencyIndex = i % bufferLength;
+                    const frequencyValue = dataArray[frequencyIndex] / 255;
 
-                    // Dynamická reakce na beaty
-                    const targetDisplacement = 1 + bassAverage * 3.0; // Větší amplituda
-                    smoothedDisplacements[vertexIndex] += (targetDisplacement - smoothedDisplacements[vertexIndex]) * 0.3;
+                    const displacement = 1 + frequencyValue * 1.5;
 
-                    positions[i] = originalX * smoothedDisplacements[vertexIndex];
-                    positions[i + 1] = originalY * smoothedDisplacements[vertexIndex];
-                    positions[i + 2] = originalZ * smoothedDisplacements[vertexIndex];
-
-                    // Výrazné barvy podle intenzity beatu
-                    const intensity = Math.min(bassAverage * 2, 1);
-                    colors[i] = intensity; // Červená
-                    colors[i + 1] = intensity * 0.3; // Zelená
-                    colors[i + 2] = 0.5 * (1 - intensity); // Modrá
+                    positions[i] = originalX * displacement;
+                    positions[i + 1] = originalY * displacement;
+                    positions[i + 2] = originalZ * displacement;
                 }
-
                 geometry.attributes.position.needsUpdate = true;
-                geometry.attributes.color.needsUpdate = true;
             }
 
-            sphere.rotation.x += 0.002;
-            sphere.rotation.y += 0.002;
+            sphere.rotation.x += 0.001;
+            sphere.rotation.y += 0.001;
 
             renderer.render(scene, camera);
         }
