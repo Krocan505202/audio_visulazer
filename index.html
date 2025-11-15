@@ -47,37 +47,37 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <script>
-        // Scéna
+      
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         camera.position.z = 5;
 
-        // Renderer
+     
         const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('visualizerCanvas'), antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
 
-        // Koule
+       
         const geometry = new THREE.IcosahedronGeometry(2, 20);
         const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
         const sphere = new THREE.Mesh(geometry, material);
         scene.add(sphere);
 
-        // Uložení původních pozic vrcholů
+       
         const originalPositions = Array.from(geometry.attributes.position.array);
 
-        // Audio
+      
         const startButton = document.getElementById('startButton');
         let audioContext, analyser, source, bufferLength, dataArray;
 
         startButton.addEventListener('click', async () => {
             try {
-                // Požádáme uživatele o výběr záložky ke sdílení (s audiem)
+              
                 const stream = await navigator.mediaDevices.getDisplayMedia({
                     video: true, // Musíme požádat i o video, aby se zobrazila volba záložky
                     audio: true
                 });
 
-                // Zvukovou stopu ze streamu použijeme pro vizualizaci
+               
                 const audioStream = new MediaStream(stream.getAudioTracks());
 
                 if (!audioContext) {
@@ -88,7 +88,7 @@
                     source = audioContext.createMediaStreamSource(audioStream);
                     source.connect(analyser);
                     
-                    // Nepřipojujeme k audioContext.destination, abychom neslyšeli zvuk dvakrát
+                  
 
                     bufferLength = analyser.frequencyBinCount;
                     dataArray = new Uint8Array(bufferLength);
@@ -104,7 +104,7 @@
         });
 
 
-        // Animace
+        
         function animate() {
             requestAnimationFrame(animate);
 
@@ -137,7 +137,7 @@
             renderer.render(scene, camera);
         }
 
-        // Změna velikosti okna
+       
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
